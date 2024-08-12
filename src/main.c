@@ -1,43 +1,37 @@
-/*
- * Copyright (c) 2016 Intel Corporation
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
+#include <stdio.h>
+#include <string.h>
 #include <zephyr/kernel.h>
-#include <zephyr/drivers/gpio.h>
+#include "deca_device_api.h"
+#include "deca_regs.h"
+#include "deca_spi.h"
+#include "port.h"
 
-/* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   1000
-
-/* The devicetree node identifier for the "led0" alias. */
-#define LED0_NODE DT_ALIAS(led0)
-
-/*
- * A build error on this line means your board is unsupported.
- * See the sample documentation for information on how to fix this.
- */
-static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
-
-int main(void)
-{
-	int ret;
-
-	if (!gpio_is_ready_dt(&led)) {
-		return 0;
-	}
-
-	ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
-	if (ret < 0) {
-		return 0;
-	}
-
-	while (1) {
-		ret = gpio_pin_toggle_dt(&led);
-		if (ret < 0) {
-			return 0;
-		}
-		k_msleep(SLEEP_TIME_MS);
-	}
-	return 0;
+int main(void){
+        printf("INIT GPIOs\t\n");
+        configure_gpio();
+        printf("INIT SPI1\t\n");
+        spi_lowrate();
+        // Reset and initialise DW1000 
+        reset_DW1000(); 
+        if (dwt_initialise(DWT_LOADNONE) == DWT_ERROR){
+                printf("INIT FAILED\t\n");
+                while (1);
+        }
+        spi_fastrate();
+        printf("INIT SUCCESS\t\n");
+        // 1st enable GPIO clocks 
+        dwt_enablegpioclocks();
+                // En este ejemplo, estamos usando GPIO2 y GPIO3 como salidas: (1) input y (0) output
+        dwt_setgpiodirection(DWT_GxM2 | DWT_GxM3, 0);//~(DWT_GxP2|DWT_GxP3)); // Only changed if the GxM# mask bit has a value of 1 for the write operation
+        printf("Begin with binky UWB\t\n");
+        while(1)
+        {
+                dwt_setgpiovalue(DWT_GxM2, DWT_GxP2); // set GPIO2 high (LED4 will light up)
+                dwt_setgpiovalue(DWT_GxM3, ~DWT_GxP3); // set GPIO3 low (LED4 will be off)
+                k_msleep(400);
+                dwt_setgpiovalue(DWT_GxM3, DWT_GxP3); // set GPIO3 high (LED4 will light up)
+                dwt_setgpiovalue(DWT_GxM2, ~DWT_GxP2); // set GPIO2 low (LED4 will be off)
+                k_msleep(400);
+        }
+        return 0;
 }
